@@ -22,18 +22,20 @@ public final class VerificationService {
     private final AuditService audit;
     private final StaffGuardConfig cfg;
     private final LockdownManager lockdown;
+    private final BanService bans;
     private final String serverSecret;
     private final RateLimiter<UUID> accountLimiter;
     private final RateLimiter<String> ipLimiter;
 
     public VerificationService(Database db, AccountService accounts, TrustedIpService ips,
-                               AuditService audit, StaffGuardConfig cfg, LockdownManager lockdown, String serverSecret) {
+                               AuditService audit, StaffGuardConfig cfg, LockdownManager lockdown, BanService bans, String serverSecret) {
         this.db = db;
         this.accounts = accounts;
         this.ips = ips;
         this.audit = audit;
         this.cfg = cfg;
         this.lockdown = lockdown;
+        this.bans = bans;
         this.serverSecret = serverSecret;
         this.accountLimiter = new RateLimiter<>(cfg.maxVerificationRequestsAccount(), Duration.ofMinutes(10));
         this.ipLimiter = new RateLimiter<>(cfg.maxVerificationRequestsIp(), Duration.ofMinutes(10));
@@ -45,34 +47,47 @@ public final class VerificationService {
             return CompletableFuture.completedFuture(Optional.empty());
         }
 
-        // Both limiters have stateful side effects, so they must always be evaluated independently.
-        boolean accountAllowed = accountLimiter.tryAcquire(uuid);
-        boolean ipAllowed = ipLimiter.tryAcquire(ip);
-        if (!accountAllowed || !ipAllowed) {
-            audit.log(uuid, account.role(), SecurityEventType.RATE_LIMIT, "DENIED", "verification rate limit", null, ips.hash(ip));
-            return CompletableFuture.completedFuture(Optional.empty());
-        }
-
         String ipHash = ips.hash(ip);
-        String rawToken = SecurityUtil.randomToken(cfg.tokenBytes());
-        String tokenHash = SecurityUtil.sha256Hex(rawToken);
-        long now = System.currentTimeMillis();
 
-        return db.createVerificationSession(
-                        uuid,
-                        account.discordId(),
-                        ipHash,
-                        tokenHash,
-                        now,
-                        now + cfg.verificationTimeout().toMillis(),
-                        cfg.maxPendingSessions())
-                .thenApply(session -> {
-                    session.ifPresent(created -> {
-                        String reason = created.ipHash().equals(ipHash) ? "new/pending IP request" : "new IP";
-                        audit.log(uuid, account.role(), SecurityEventType.VERIFICATION_CREATED, "SUCCESS", reason, created.sessionId(), ipHash);
+        // Reconnecting with the same untrusted IP while a verification is already pending
+        // should reuse that session instead of consuming another rate-limit slot. This keeps
+        // the account recoverable after a denied login while still enforcing limits for new
+        // verification attempts. The atomic DB create path remains the final authority.
+        return db.findPendingSession(uuid).thenCompose(existing -> {
+            if (existing.isPresent() && existing.get().ipHash().equals(ipHash)) {
+                audit.log(uuid, account.role(), SecurityEventType.VERIFICATION_CREATED, "SUCCESS",
+                        "reused pending verification", existing.get().sessionId(), ipHash);
+                return CompletableFuture.completedFuture(existing.map(Created::new));
+            }
+
+            // Both limiters have stateful side effects, so they must always be evaluated independently.
+            boolean accountAllowed = accountLimiter.tryAcquire(uuid);
+            boolean ipAllowed = ipLimiter.tryAcquire(ip);
+            if (!accountAllowed || !ipAllowed) {
+                audit.log(uuid, account.role(), SecurityEventType.RATE_LIMIT, "DENIED", "verification rate limit", null, ipHash);
+                return CompletableFuture.completedFuture(Optional.empty());
+            }
+
+            String rawToken = SecurityUtil.randomToken(cfg.tokenBytes());
+            String tokenHash = SecurityUtil.sha256Hex(rawToken);
+            long now = System.currentTimeMillis();
+
+            return db.createVerificationSession(
+                            uuid,
+                            account.discordId(),
+                            ipHash,
+                            tokenHash,
+                            now,
+                            now + cfg.verificationTimeout().toMillis(),
+                            cfg.maxPendingSessions())
+                    .thenApply(session -> {
+                        session.ifPresent(created -> {
+                            String reason = created.ipHash().equals(ipHash) ? "new/pending IP request" : "new IP";
+                            audit.log(uuid, account.role(), SecurityEventType.VERIFICATION_CREATED, "SUCCESS", reason, created.sessionId(), ipHash);
+                        });
+                        return session.map(Created::new);
                     });
-                    return session.map(Created::new);
-                });
+        });
     }
 
     /**
@@ -102,6 +117,11 @@ public final class VerificationService {
                         Role role = account == null ? null : account.role();
                         return ips.load(List.of(session.uuid()))
                                 .thenApply(v -> {
+                                    // Database.approveSession() atomically persisted the new trusted IP
+                                    // and removed the AP-StaffGuard ban. Synchronize in-memory caches only
+                                    // after that transaction has committed successfully.
+                                    ips.markTrustedHash(session.uuid(), session.ipHash());
+                                    bans.markManagedBanRemoved(session.uuid());
                                     audit.log(session.uuid(), role, SecurityEventType.VERIFICATION_APPROVED, "SUCCESS", "Discord approval", sessionId, session.ipHash());
                                     audit.log(session.uuid(), role, SecurityEventType.TRUSTED_IP_ADDED, "SUCCESS", "verification approval", sessionId, session.ipHash());
                                     audit.log(session.uuid(), role, SecurityEventType.TEMPBAN_REMOVED, "SUCCESS", "verification approval", sessionId, null);

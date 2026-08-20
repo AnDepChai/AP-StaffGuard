@@ -58,6 +58,15 @@ public final class BanService {
         return db.removeBan(u).thenApply(x -> null);
     }
 
+    /**
+     * Clears the in-memory managed-ban state after an atomic database transaction has
+     * already removed the AP-StaffGuard ban. This is intentionally cache-only: callers
+     * must only use it after the database transaction has committed successfully.
+     */
+    public void markManagedBanRemoved(UUID u) {
+        cache.remove(u);
+    }
+
     private static Throwable unwrap(Throwable error) {
         if (error instanceof java.util.concurrent.CompletionException && error.getCause() != null) return error.getCause();
         return error;

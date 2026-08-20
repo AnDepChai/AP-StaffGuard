@@ -62,13 +62,17 @@ public final class LoginListener implements Listener {
         }
         String ip = clientAddress.getHostAddress();
 
-        if (plugin.banService().isBanned(uuid)) {
-            deny(event, plugin.config().differentIpMessage());
-            return;
-        }
-
+        // A managed AP-StaffGuard ban blocks the login, but it must never prevent the
+        // account from reaching the verification flow. Otherwise reconnecting after a
+        // denied new-IP login can get stuck behind the stale/temporary ban and never
+        // produce a new Discord verification request.
+        // The trusted-IP check comes first; once an IP has been approved, it is allowed.
         try {
             if (plugin.ips().isTrusted(uuid, ip).get(3, TimeUnit.SECONDS)) {
+                // A trusted IP is the successful endpoint of this security flow. Clear any
+                // stale managed-ban cache entry left by an approval performed in an older
+                // in-process state before allowing the connection.
+                plugin.banService().markManagedBanRemoved(uuid);
                 plugin.accounts().setLastSeen(uuid, plugin.ips().hash(ip));
                 plugin.audit().log(uuid, account.role(), SecurityEventType.LOGIN_ATTEMPT, "ALLOWED", "trusted IP", null, plugin.ips().hash(ip));
                 return;
@@ -89,6 +93,8 @@ public final class LoginListener implements Listener {
                 return;
             }
 
+            boolean wasAlreadyBanned = plugin.banService().isBanned(uuid);
+
             boolean sent = plugin.discord().sendVerification(account, ip, created).get(7, TimeUnit.SECONDS);
             if (!sent) {
                 plugin.banService().create(uuid).get(3, TimeUnit.SECONDS);
@@ -97,8 +103,10 @@ public final class LoginListener implements Listener {
                 return;
             }
 
-            plugin.banService().create(uuid).get(3, TimeUnit.SECONDS);
-            plugin.audit().log(uuid, account.role(), SecurityEventType.TEMPBAN_CREATED, "SUCCESS", "untrusted IP verification required", created.session().sessionId(), plugin.ips().hash(ip));
+            if (!wasAlreadyBanned) {
+                plugin.banService().create(uuid).get(3, TimeUnit.SECONDS);
+                plugin.audit().log(uuid, account.role(), SecurityEventType.TEMPBAN_CREATED, "SUCCESS", "untrusted IP verification required", created.session().sessionId(), plugin.ips().hash(ip));
+            }
             deny(event, plugin.config().differentIpMessage());
         } catch (TimeoutException ex) {
             deny(event, plugin.config().differentIpMessage());

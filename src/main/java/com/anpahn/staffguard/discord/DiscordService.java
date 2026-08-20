@@ -236,8 +236,8 @@ public final class DiscordService extends ListenerAdapter implements AutoCloseab
                         editHook(hook, "❌ Có lỗi hệ thống. Verification vẫn được xử lý theo cơ chế fail-safe; kiểm tra log để biết chi tiết.");
                     } else if (value instanceof java.util.Optional<?> optional && optional.isPresent()) {
                         editHook(hook, action.equals("a")
-                                ? "✅ Đã xác minh. Hãy đăng nhập lại Minecraft."
-                                : "❌ Đã từ chối. IP mới không được trusted.");
+                                ? "✅ Đã xác minh thành công. IP mới đã được trusted và ban StaffGuard đã được gỡ. Hãy đăng nhập lại bằng IP này."
+                                : "❌ Đã từ chối. IP mới không được trusted và vẫn bị chặn.");
                     } else {
                         editHook(hook, "❌ Verification không hợp lệ, đã hết hạn hoặc đã được xử lý.");
                     }

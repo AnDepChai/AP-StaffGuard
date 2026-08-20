@@ -83,7 +83,7 @@ public final class StaffGuardPlugin extends JavaPlugin {
             ips = new TrustedIpService(db, secret, config.maxTrustedIps());
             bans = new BanService(db, config.temporaryBanDuration(), getLogger());
             audit = new AuditService(db, getLogger());
-            verification = new VerificationService(db, accounts, ips, audit, config, lockdown, secret);
+            verification = new VerificationService(db, accounts, ips, audit, config, lockdown, bans, secret);
             discord = new DiscordService(config, verification, getLogger());
 
             if (config.proxyMode() != com.anpahn.staffguard.model.ProxyMode.NONE) {

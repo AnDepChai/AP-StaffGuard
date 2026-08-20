@@ -410,6 +410,18 @@ public final class Database implements AutoCloseable {
 
     public CompletableFuture<Optional<VerificationSession>> findSession(UUID id){return submit(c->{String sql="SELECT session_id,uuid,discord_id,ip_hash,token_hash,state,created_at,expires_at,processed_at,processed_by FROM verification_sessions WHERE session_id=?";try(PreparedStatement ps=c.prepareStatement(sql)){ps.setString(1,id.toString());try(ResultSet rs=ps.executeQuery()){return rs.next()?Optional.of(session(rs)):Optional.empty();}}});}
 
+    public CompletableFuture<Optional<VerificationSession>> findPendingSession(UUID uuid){
+        return submit(c->{
+            String sql="SELECT session_id,uuid,discord_id,ip_hash,token_hash,state,created_at,expires_at,processed_at,processed_by " +
+                    "FROM verification_sessions WHERE uuid=? AND state='PENDING' AND expires_at>? ORDER BY created_at DESC LIMIT 1";
+            try(PreparedStatement ps=c.prepareStatement(sql)){
+                ps.setString(1,uuid.toString());
+                ps.setLong(2,System.currentTimeMillis());
+                try(ResultSet rs=ps.executeQuery()){return rs.next()?Optional.of(session(rs)):Optional.empty();}
+            }
+        });
+    }
+
     /** Atomically consumes a pending session. Authorization is performed before this method. */
     public CompletableFuture<Optional<VerificationSession>> consumeSession(UUID id, VerificationState next, String actor){
         return submit(c->{
