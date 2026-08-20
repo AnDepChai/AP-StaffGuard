@@ -1,0 +1,71 @@
+# AP-StaffGuard - single configuration file
+# Do NOT share your Discord bot token or server secret.
+
+security:
+  enabled: true
+  temporary-ban-duration: 5m
+  verification-timeout: 2m
+  max-trusted-ips-per-account: 10
+  max-verification-requests-per-10-minutes: 3
+  max-verification-requests-per-ip-per-10-minutes: 5
+  max-pending-sessions: 100
+  max-discord-interactions-per-minute: 30
+  max-discord-accounts-per-user: 2
+  token-bytes: 32
+  mask-ip-in-discord: true
+
+discord:
+  # Disabled by default so a fresh install can start safely before Discord is configured.
+  # Enable only after setting channel-id, bot-token and at least one approver (or self-approval).
+  enabled: false
+  # Channel where every protected-account verification request is posted.
+  channel-id: ""
+
+  # Discord bot token. Keep this file private and never publish/share it.
+  bot-token: ""
+
+  # Discord User IDs that are explicitly allowed to approve/reject any request.
+  # Add as many as needed. IDs must be 17-20 digit Discord User IDs.
+  owner-user-ids: []
+  staff-user-ids: []
+
+  # Send the same verification embed + buttons to the protected account's Discord DM.
+  send-dm: true
+
+  # The protected account's linked Discord User ID may approve/reject its OWN session.
+  # Set false for stricter two-person / operator approval.
+  allow-self-approval: true
+
+
+database:
+  type: sqlite
+  file: staffguard.db
+
+proxy:
+  # NONE = direct Paper connection.
+  # VELOCITY = Velocity modern forwarding.
+  # BUNGEECORD = Bungee/legacy forwarding.
+  mode: NONE
+  require-trusted-proxy: true
+  trusted-proxy-addresses: []
+
+server:
+  display-name: "Minecraft Server"
+
+server-secret:
+  # Random secret used for StaffGuard IP/HMAC security. Minimum 32 characters.
+  # Keep this file private and never publish/share it.
+  value: ""
+
+messages:
+  different-ip: "§cTài khoản đang đăng nhập từ IP chưa được tin cậy. §fVui lòng xác minh qua Discord rồi đăng nhập lại."
+  lockdown: "§cStaffGuard đang ở chế độ LOCKDOWN. §fVui lòng liên hệ quản trị viên."
+  security-unavailable: "§cBảo mật StaffGuard chưa sẵn sàng. §fVui lòng liên hệ quản trị viên."
+  prefix: "§8[§bAP-StaffGuard§8] §r"
+  no-permission: "§cBạn không có quyền thực hiện thao tác này."
+  player-only: "§cThao tác này yêu cầu player."
+  operation-failed: "§cThao tác thất bại. Kiểm tra console để biết chi tiết."
+  not-found: "§cKhông tìm thấy protected account."
+  invalid-role: "§cRole phải là OWNER hoặc STAFF."
+  invalid-discord-id: "§cDiscord User ID không hợp lệ."
+  usage: "§e/staffguard help"

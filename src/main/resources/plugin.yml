@@ -1,0 +1,16 @@
+name: AP-StaffGuard
+version: 1.0.0
+main: com.anpahn.staffguard.StaffGuardPlugin
+api-version: '1.21'
+author: AnPahn
+description: Security-first protection for registered OWNER/STAFF accounts.
+commands:
+  staffguard:
+    description: Manage AP-StaffGuard security.
+    usage: /staffguard help
+    aliases: [sg]
+permissions:
+  staffguard.admin:
+    default: false
+  staffguard.owner:
+    default: false
