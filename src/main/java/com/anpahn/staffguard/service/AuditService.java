@@ -8,7 +8,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-/** Persists security events and makes audit-write failures observable. */
 public final class AuditService {
     private final Database db;
     private final Logger logger;

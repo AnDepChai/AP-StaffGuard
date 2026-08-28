@@ -48,19 +48,12 @@ public final class VerificationService {
         }
 
         String ipHash = ips.hash(ip);
-
-        // Reconnecting with the same untrusted IP while a verification is already pending
-        // should reuse that session instead of consuming another rate-limit slot. This keeps
-        // the account recoverable after a denied login while still enforcing limits for new
-        // verification attempts. The atomic DB create path remains the final authority.
         return db.findPendingSession(uuid).thenCompose(existing -> {
             if (existing.isPresent() && existing.get().ipHash().equals(ipHash)) {
                 audit.log(uuid, account.role(), SecurityEventType.VERIFICATION_CREATED, "SUCCESS",
                         "reused pending verification", existing.get().sessionId(), ipHash);
                 return CompletableFuture.completedFuture(existing.map(Created::new));
             }
-
-            // Both limiters have stateful side effects, so they must always be evaluated independently.
             boolean accountAllowed = accountLimiter.tryAcquire(uuid);
             boolean ipAllowed = ipLimiter.tryAcquire(ip);
             if (!accountAllowed || !ipAllowed) {
@@ -90,9 +83,6 @@ public final class VerificationService {
         });
     }
 
-    /**
-     * Returns a 128-bit truncated HMAC so the Discord component custom_id stays safely below Discord's 100-char limit.
-     */
     public String componentProof(VerificationSession session, String action) {
         String full = SecurityUtil.hmacSha256Hex(serverSecret, action + ":" + session.sessionId() + ":" + session.tokenHash());
         return full.substring(0, 32);
@@ -115,13 +105,13 @@ public final class VerificationService {
                         if (result.isEmpty()) return CompletableFuture.completedFuture(Optional.empty());
                         ProtectedAccount account = accounts.getCached(session.uuid());
                         Role role = account == null ? null : account.role();
+                        ips.markTrustedHash(session.uuid(), session.ipHash());
+                        bans.markManagedBanRemoved(session.uuid());
                         return ips.load(List.of(session.uuid()))
-                                .thenApply(v -> {
-                                    // Database.approveSession() atomically persisted the new trusted IP
-                                    // and removed the AP-StaffGuard ban. Synchronize in-memory caches only
-                                    // after that transaction has committed successfully.
-                                    ips.markTrustedHash(session.uuid(), session.ipHash());
-                                    bans.markManagedBanRemoved(session.uuid());
+                                .handle((ignored, refreshError) -> {
+                                    if (refreshError != null) {
+                                        audit.log(session.uuid(), role, SecurityEventType.AUTH_FAILURE, "WARNING", "trusted IP cache refresh failed after approved transaction", sessionId, session.ipHash());
+                                    }
                                     audit.log(session.uuid(), role, SecurityEventType.VERIFICATION_APPROVED, "SUCCESS", "Discord approval", sessionId, session.ipHash());
                                     audit.log(session.uuid(), role, SecurityEventType.TRUSTED_IP_ADDED, "SUCCESS", "verification approval", sessionId, session.ipHash());
                                     audit.log(session.uuid(), role, SecurityEventType.TEMPBAN_REMOVED, "SUCCESS", "verification approval", sessionId, null);

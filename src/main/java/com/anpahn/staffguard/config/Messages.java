@@ -24,8 +24,6 @@ public record Messages(
                 c.getString("messages.usage", "§e/staffguard help")
         );
     }
-
-    public String prefix() { return prefix; }
     public String noPermission() { return prefix + noPermission; }
     public String playerOnly() { return prefix + playerOnly; }
     public String operationFailed() { return prefix + operationFailed; }

@@ -5,7 +5,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
 
-/** Matches an address against exact addresses and CIDR ranges. */
 public final class IpMatcher {
     private final List<Range> ranges;
 

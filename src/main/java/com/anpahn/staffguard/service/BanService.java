@@ -26,11 +26,12 @@ public final class BanService {
     }
 
     public CompletableFuture<Void> load(Collection<UUID> ids) {
+        cache.keySet().retainAll(ids);
         return CompletableFuture.allOf(ids.stream()
-                .map(u -> db.findBan(u).thenAccept(o -> o
-                        .filter(b -> b.activeAt(System.currentTimeMillis()))
-                        .ifPresent(b -> cache.put(u, b.expiresAt())))
-                        )
+                .map(u -> db.findBan(u).thenAccept(o -> {
+                    if (o.isPresent() && o.get().activeAt(System.currentTimeMillis())) cache.put(u, o.get().expiresAt());
+                    else cache.remove(u);
+                }))
                 .toArray(CompletableFuture[]::new));
     }
 
@@ -49,20 +50,19 @@ public final class BanService {
 
     public CompletableFuture<Void> create(UUID u) {
         long expires = System.currentTimeMillis() + duration.toMillis();
-        cache.put(u, expires);
-        return db.setBan(u, MARKER, expires).thenApply(x -> null);
+        return db.setBan(u, MARKER, expires).thenApply(x -> {
+            cache.put(u, expires);
+            return null;
+        });
     }
 
     public CompletableFuture<Void> remove(UUID u) {
-        cache.remove(u);
-        return db.removeBan(u).thenApply(x -> null);
+        return db.removeBan(u).thenApply(x -> {
+            cache.remove(u);
+            return null;
+        });
     }
 
-    /**
-     * Clears the in-memory managed-ban state after an atomic database transaction has
-     * already removed the AP-StaffGuard ban. This is intentionally cache-only: callers
-     * must only use it after the database transaction has committed successfully.
-     */
     public void markManagedBanRemoved(UUID u) {
         cache.remove(u);
     }

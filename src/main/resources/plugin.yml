@@ -8,7 +8,8 @@ commands:
   staffguard:
     description: Manage AP-StaffGuard security.
     usage: /staffguard help
-    aliases: [sg]
+    aliases:
+      - "sg"
 permissions:
   staffguard.admin:
     default: false

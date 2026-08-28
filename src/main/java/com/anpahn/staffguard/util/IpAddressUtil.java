@@ -4,7 +4,6 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-/** IP-literal parsing that never treats arbitrary user input as a DNS hostname. */
 public final class IpAddressUtil {
     private IpAddressUtil() {}
 
@@ -23,10 +22,6 @@ public final class IpAddressUtil {
             char ch = input.charAt(i);
             if (!(Character.digit(ch, 16) >= 0 || ch == ':' || ch == '.' || ch == '%')) return null;
         }
-
-        // A colon-containing input is only accepted as an IPv6 literal. Java does not perform
-        // hostname DNS lookup for a syntactically valid IPv6 literal here; reject any result that
-        // is not actually an IPv6 address to keep the method's contract explicit.
         try {
             InetAddress address = InetAddress.getByName(input);
             return address instanceof Inet6Address ? address : null;

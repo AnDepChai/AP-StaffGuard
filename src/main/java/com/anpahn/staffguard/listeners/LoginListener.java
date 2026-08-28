@@ -14,7 +14,6 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-/** Login gate. It is intentionally fail-closed even while the plugin is still initializing. */
 public final class LoginListener implements Listener {
     private final StaffGuardPlugin plugin;
 
@@ -24,9 +23,6 @@ public final class LoginListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
-        // Before config/account state is safely established, fail closed for everyone because we
-        // cannot yet prove whether this UUID is protected. Once the account cache is loaded, a
-        // degraded-but-known backend can safely allow normal members while still denying protected accounts.
         if (plugin.config() == null) {
             deny(event, "§cAP-StaffGuard chưa khởi tạo xong. §fVui lòng thử lại sau.");
             return;
@@ -61,17 +57,8 @@ public final class LoginListener implements Listener {
             return;
         }
         String ip = clientAddress.getHostAddress();
-
-        // A managed AP-StaffGuard ban blocks the login, but it must never prevent the
-        // account from reaching the verification flow. Otherwise reconnecting after a
-        // denied new-IP login can get stuck behind the stale/temporary ban and never
-        // produce a new Discord verification request.
-        // The trusted-IP check comes first; once an IP has been approved, it is allowed.
         try {
             if (plugin.ips().isTrusted(uuid, ip).get(3, TimeUnit.SECONDS)) {
-                // A trusted IP is the successful endpoint of this security flow. Clear any
-                // stale managed-ban cache entry left by an approval performed in an older
-                // in-process state before allowing the connection.
                 plugin.banService().markManagedBanRemoved(uuid);
                 plugin.accounts().setLastSeen(uuid, plugin.ips().hash(ip));
                 plugin.audit().log(uuid, account.role(), SecurityEventType.LOGIN_ATTEMPT, "ALLOWED", "trusted IP", null, plugin.ips().hash(ip));

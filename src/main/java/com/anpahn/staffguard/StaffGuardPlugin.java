@@ -6,6 +6,8 @@ import com.anpahn.staffguard.config.StaffGuardConfig;
 import com.anpahn.staffguard.database.Database;
 import com.anpahn.staffguard.discord.DiscordService;
 import com.anpahn.staffguard.listeners.LoginListener;
+import com.anpahn.staffguard.listeners.CommandAuditListener;
+import com.anpahn.staffguard.listeners.PrivacyListener;
 import com.anpahn.staffguard.security.LockdownManager;
 import com.anpahn.staffguard.security.SecurityState;
 import com.anpahn.staffguard.service.AccountService;
@@ -27,7 +29,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
-/** Main plugin lifecycle. SecurityState is fail-closed until the complete backend is ready. */
 public final class StaffGuardPlugin extends JavaPlugin {
     private StaffGuardConfig config;
     private Messages messages;
@@ -52,15 +53,14 @@ public final class StaffGuardPlugin extends JavaPlugin {
         securityState.setReady(false);
         saveDefaultConfig();
 
-        // Register the guard and command before parsing security-sensitive configuration.
-        // LoginListener is deliberately safe while config/services are null and denies logins
-        // until securityState becomes ready.
         try {
             var command = Objects.requireNonNull(getCommand("staffguard"), "staffguard command missing from plugin.yml");
             StaffGuardCommand commandHandler = new StaffGuardCommand(this);
             command.setExecutor(commandHandler);
             command.setTabCompleter(commandHandler);
             getServer().getPluginManager().registerEvents(new LoginListener(this), this);
+            getServer().getPluginManager().registerEvents(new CommandAuditListener(this), this);
+            getServer().getPluginManager().registerEvents(new PrivacyListener(this), this);
         } catch (Exception e) {
             getLogger().log(Level.SEVERE, "AP-StaffGuard could not register its fail-closed guard/command.", e);
             return;
@@ -170,8 +170,6 @@ public final class StaffGuardPlugin extends JavaPlugin {
         CompletableFuture<Void> future = new CompletableFuture<>();
         Bukkit.getScheduler().runTask(this, () -> {
             try {
-                // Security-critical services capture configuration at construction time (HMAC secret, Discord authorization,
-                // rate limits and proxy trust rules). Hot-swapping only messages avoids an inconsistent runtime security boundary.
                 reloadConfig();
                 messages = Messages.from(getConfig());
                 future.complete(null);

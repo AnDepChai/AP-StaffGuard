@@ -365,7 +365,6 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
         try {
             return UUID.fromString(input);
         } catch (IllegalArgumentException ignored) {
-            // continue with name lookup
         }
         ProtectedAccount account = plugin.accounts().getByUsername(input);
         if (account != null) return account.uuid();

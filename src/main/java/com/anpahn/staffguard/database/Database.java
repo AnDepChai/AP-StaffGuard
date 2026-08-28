@@ -315,11 +315,6 @@ public final class Database implements AutoCloseable {
 
     public CompletableFuture<Long> pendingCount() { return submit(c -> { try (PreparedStatement ps = c.prepareStatement("SELECT COUNT(*) FROM verification_sessions WHERE state='PENDING' AND expires_at>?")) { ps.setLong(1, System.currentTimeMillis()); try (ResultSet rs=ps.executeQuery()){rs.next();return rs.getLong(1);} } }); }
 
-    /**
-     * Atomically handles expiry, existing-PENDING reuse, IP replacement, global pending limit and INSERT.
-     * The single SQLite executor already serializes writers, but the transaction is important so the
-     * entire business decision cannot be interleaved with another create() call.
-     */
     public CompletableFuture<Optional<VerificationSession>> createVerificationSession(
             UUID uuid, String discord, String ipHash, String tokenHash, long created, long expires, int maxPending) {
         return submit(c -> {
@@ -422,7 +417,6 @@ public final class Database implements AutoCloseable {
         });
     }
 
-    /** Atomically consumes a pending session. Authorization is performed before this method. */
     public CompletableFuture<Optional<VerificationSession>> consumeSession(UUID id, VerificationState next, String actor){
         return submit(c->{
             c.setAutoCommit(false);
@@ -440,7 +434,6 @@ public final class Database implements AutoCloseable {
         });
     }
     private Optional<VerificationSession> querySession(Connection c,UUID id)throws SQLException{try(PreparedStatement ps=c.prepareStatement("SELECT session_id,uuid,discord_id,ip_hash,token_hash,state,created_at,expires_at,processed_at,processed_by FROM verification_sessions WHERE session_id=?")){ps.setString(1,id.toString());try(ResultSet rs=ps.executeQuery()){return rs.next()?Optional.of(session(rs)):Optional.empty();}}}
-    /** Atomically approves a pending verification, trusts its IP, updates account last-seen, and removes only the StaffGuard-managed ban. */
     private static void ensureTrustedIpSlot(Connection c, UUID uuid, String hash, int max) throws SQLException {
         boolean exists;
         long count;

@@ -1,10 +1,13 @@
-# AP-StaffGuard - single configuration file
-# Do NOT share your Discord bot token or server secret.
+config-info:
+  language: "vi"
+  purpose: "Cấu hình bảo mật, Discord, kiểm toán lệnh và quyền riêng tư cho AP-StaffGuard."
+  sensitive-data: "discord.bot-token và server-secret.value là dữ liệu bí mật; không chia sẻ hoặc commit công khai."
+  list-format: "Mỗi mục dạng danh sách dùng một dòng bắt đầu bằng dấu gạch ngang. Giữ mục trống là - \"\" nếu chưa có giá trị."
 
 security:
   enabled: true
-  temporary-ban-duration: 5m
-  verification-timeout: 2m
+  temporary-ban-duration: "5m"
+  verification-timeout: "2m"
   max-trusted-ips-per-account: 10
   max-verification-requests-per-10-minutes: 3
   max-verification-requests-per-ip-per-10-minutes: 5
@@ -14,48 +17,90 @@ security:
   token-bytes: 32
   mask-ip-in-discord: true
 
+privacy:
+  enabled: true
+  suppress-protected-join-message: true
+  redact-ip-in-command-audit: true
+  redact-coordinates-in-command-audit: true
+
 discord:
-  # Disabled by default so a fresh install can start safely before Discord is configured.
-  # Enable only after setting channel-id, bot-token and at least one approver (or self-approval).
   enabled: false
-  # Channel where every protected-account verification request is posted.
   channel-id: ""
-
-  # Discord bot token. Keep this file private and never publish/share it.
   bot-token: ""
-
-  # Discord User IDs that are explicitly allowed to approve/reject any request.
-  # Add as many as needed. IDs must be 17-20 digit Discord User IDs.
-  owner-user-ids: []
-  staff-user-ids: []
-
-  # Send the same verification embed + buttons to the protected account's Discord DM.
+  owner-user-ids:
+    - ""
+  staff-user-ids:
+    - ""
   send-dm: true
-
-  # The protected account's linked Discord User ID may approve/reject its OWN session.
-  # Set false for stricter two-person / operator approval.
   allow-self-approval: true
-
-
-database:
-  type: sqlite
-  file: staffguard.db
-
-proxy:
-  # NONE = direct Paper connection.
-  # VELOCITY = Velocity modern forwarding.
-  # BUNGEECORD = Bungee/legacy forwarding.
-  mode: NONE
-  require-trusted-proxy: true
-  trusted-proxy-addresses: []
+  embeds:
+    verification:
+      title: "🔐 AP-STAFFGUARD • Xác thực đăng nhập"
+      color: "#F5A623"
+      description: "Phát hiện đăng nhập từ IP chưa được tin cậy. Hãy kiểm tra thông tin bên dưới trước khi xác nhận."
+      minecraft-field: "👤 Minecraft"
+      role-field: "🛡️ Role"
+      ip-field: "🌐 IP"
+      verification-field: "🆔 Verification"
+      expiry-field: "⏱️ Hết hạn"
+      server-field: "🏠 Server"
+      footer: "AP-StaffGuard • Owner có thể xác nhận mọi request; Staff chỉ xác nhận request của chính mình."
+      approve-button: "✅ Xác nhận"
+      deny-button: "❌ Từ chối"
+    command-audit:
+      title: "🛡️ AP-StaffGuard • Admin Command Audit"
+      safe-color: "#3498DB"
+      danger-color: "#E74C3C"
+      description: "Ghi nhận thao tác command của admin/operator trên server."
+      command-field: "💻 Command"
+      sender-field: "👤 Người thực hiện"
+      permission-field: "🔐 Quyền"
+      server-field: "🏠 Server"
+      channel-field: "📍 Nguồn"
+      footer: "AP-StaffGuard • Command audit"
+  command-audit:
+    enabled: false
+    channel-id: ""
+    log-admin-commands: true
+    log-op-commands: true
+    log-console-commands: true
+    redact-sensitive-arguments: true
+    dangerous-commands:
+      - "op"
+      - "deop"
+      - "ban"
+      - "ban-ip"
+      - "pardon"
+      - "pardon-ip"
+      - "kick"
+      - "whitelist"
+      - "stop"
+      - "restart"
+      - "reload"
+      - "execute"
+      - "tp"
+      - "teleport"
+      - "give"
+      - "gamemode"
+      - "setworldspawn"
+      - "locate"
+      - "summon"
 
 server:
   display-name: "Minecraft Server"
 
+database:
+  type: "sqlite"
+  file: "staffguard.db"
+
 server-secret:
-  # Random secret used for StaffGuard IP/HMAC security. Minimum 32 characters.
-  # Keep this file private and never publish/share it.
   value: ""
+
+proxy:
+  mode: "NONE"
+  require-trusted-proxy: true
+  trusted-proxy-addresses:
+    - ""
 
 messages:
   different-ip: "§cTài khoản đang đăng nhập từ IP chưa được tin cậy. §fVui lòng xác minh qua Discord rồi đăng nhập lại."
