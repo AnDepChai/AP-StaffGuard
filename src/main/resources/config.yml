@@ -15,6 +15,9 @@ security:
   max-discord-interactions-per-minute: 30
   max-discord-accounts-per-user: 2
   token-bytes: 32
+  max-verification-notifications: 3
+  verification-notification-cooldown: "30s"
+  audit-retention-days: 30
   mask-ip-in-discord: true
 
 privacy:
@@ -32,7 +35,7 @@ discord:
   staff-user-ids:
     - ""
   send-dm: true
-  allow-self-approval: true
+  allow-self-approval: false
   embeds:
     verification:
       title: "🔐 AP-STAFFGUARD • Xác thực đăng nhập"
@@ -94,6 +97,7 @@ database:
   file: "staffguard.db"
 
 server-secret:
+  # Bắt buộc: 256-bit secret persistent. Dùng 64 hex chars hoặc base64/base64url của đúng 32 bytes. Không để trống.
   value: ""
 
 proxy:

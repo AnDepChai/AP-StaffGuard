@@ -2,6 +2,7 @@ package com.anpahn.staffguard.config;
 
 import com.anpahn.staffguard.model.ProxyMode;
 import com.anpahn.staffguard.util.DurationParser;
+import com.anpahn.staffguard.util.IpMatcher;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.time.Duration;
@@ -20,6 +21,9 @@ public record StaffGuardConfig(
         int maxDiscordInteractionsPerMinute,
         int maxDiscordAccountsPerUser,
         int tokenBytes,
+        int maxVerificationNotifications,
+        Duration verificationNotificationCooldown,
+        int auditRetentionDays,
         boolean maskIpInDiscord,
         boolean discordEnabled,
         String discordChannelId,
@@ -51,6 +55,12 @@ public record StaffGuardConfig(
 
         int tokenBytes = c.getInt("security.token-bytes", 32);
         if (tokenBytes < 16 || tokenBytes > 128) throw new IllegalArgumentException("security.token-bytes must be 16..128");
+        int notificationMax = c.getInt("security.max-verification-notifications", 3);
+        Duration notificationCooldown = DurationParser.parse(c.getString("security.verification-notification-cooldown", "30s"));
+        int auditRetentionDays = c.getInt("security.audit-retention-days", 30);
+        if (notificationMax < 1 || notificationMax > 20) throw new IllegalArgumentException("security.max-verification-notifications must be 1..20");
+        if (notificationCooldown.compareTo(Duration.ofMinutes(10)) > 0) throw new IllegalArgumentException("security.verification-notification-cooldown must be <= 10m");
+        if (auditRetentionDays < 1 || auditRetentionDays > 3650) throw new IllegalArgumentException("security.audit-retention-days must be 1..3650");
 
         int maxTrusted = c.getInt("security.max-trusted-ips-per-account", 10);
         int perAccount = c.getInt("security.max-verification-requests-per-10-minutes", 3);
@@ -67,6 +77,7 @@ public record StaffGuardConfig(
         List<String> trustedProxyAddresses = c.getStringList("proxy.trusted-proxy-addresses").stream().filter(v -> v != null && !v.isBlank()).map(String::trim).distinct().toList();
         if (proxyMode != ProxyMode.NONE && !requireTrustedProxy) throw new IllegalArgumentException("Proxy mode requires trusted proxy enforcement");
         if (proxyMode != ProxyMode.NONE && trustedProxyAddresses.isEmpty()) throw new IllegalArgumentException("Proxy mode requires at least one trusted proxy address");
+        if (!trustedProxyAddresses.isEmpty()) new IpMatcher(trustedProxyAddresses);
 
         List<String> ownerIds = validateDiscordIds(c.getStringList("discord.owner-user-ids"), "discord.owner-user-ids");
         List<String> staffIds = validateDiscordIds(c.getStringList("discord.staff-user-ids"), "discord.staff-user-ids");
@@ -74,8 +85,9 @@ public record StaffGuardConfig(
             if (staffIds.contains(ownerId)) throw new IllegalArgumentException("Discord User ID " + ownerId + " cannot be listed as both owner and staff");
         }
         boolean discordEnabled = c.getBoolean("discord.enabled", false);
-        boolean selfApproval = c.getBoolean("discord.allow-self-approval", true);
-        if (discordEnabled && c.getString("discord.channel-id", "").isBlank()) throw new IllegalArgumentException("discord.channel-id is required when Discord integration is enabled");
+        boolean selfApproval = c.getBoolean("discord.allow-self-approval", false);
+        String discordChannelId = c.getString("discord.channel-id", "");
+        if (discordEnabled && !DISCORD_ID.matcher(discordChannelId).matches()) throw new IllegalArgumentException("discord.channel-id must be a Discord snowflake (17..20 digits)");
         if (discordEnabled && ownerIds.isEmpty() && staffIds.isEmpty() && !selfApproval) throw new IllegalArgumentException("At least one Discord approver is required when self approval is disabled");
 
         PrivacyConfig privacy = new PrivacyConfig(
@@ -110,8 +122,10 @@ public record StaffGuardConfig(
                 c.getBoolean("discord.command-audit.redact-sensitive-arguments", true)
         );
         if (commandAudit.enabled() && !discordEnabled) throw new IllegalArgumentException("discord.command-audit requires discord.enabled=true");
-        if (commandAudit.enabled() && commandAudit.channelId().isBlank()) throw new IllegalArgumentException("discord.command-audit.channel-id is required when command audit is enabled");
+        if (commandAudit.enabled() && !DISCORD_ID.matcher(commandAudit.channelId()).matches()) throw new IllegalArgumentException("discord.command-audit.channel-id must be a Discord snowflake (17..20 digits)");
+        validateCommandAudit(commandAudit);
 
+        validateTextLengths(verificationEmbed);
         CommandAuditEmbedConfig commandAuditEmbed = new CommandAuditEmbedConfig(
                 c.getString("discord.embeds.command-audit.title", "🛡️ AP-StaffGuard • Admin Command Audit"),
                 parseColor(c.getString("discord.embeds.command-audit.safe-color", "#3498DB")),
@@ -127,8 +141,8 @@ public record StaffGuardConfig(
 
         return new StaffGuardConfig(
                 c.getBoolean("security.enabled", true), temp, timeout, maxTrusted, perAccount, perIp, pending, interactions, maxDiscord,
-                tokenBytes, c.getBoolean("security.mask-ip-in-discord", true), discordEnabled,
-                c.getString("discord.channel-id", ""), c.getString("discord.bot-token", ""), ownerIds, staffIds,
+                tokenBytes, notificationMax, notificationCooldown, auditRetentionDays, c.getBoolean("security.mask-ip-in-discord", true), discordEnabled,
+                discordChannelId, c.getString("discord.bot-token", ""), ownerIds, staffIds,
                 c.getBoolean("discord.send-dm", true), selfApproval,
                 c.getString("database.file", "staffguard.db"), c.getString("server.display-name", "Minecraft Server"),
                 c.getString("server-secret.value", ""), proxyMode, trustedProxyAddresses,
@@ -137,6 +151,18 @@ public record StaffGuardConfig(
                 c.getString("messages.security-unavailable", "§cBảo mật StaffGuard chưa sẵn sàng. §fVui lòng liên hệ quản trị viên."),
                 privacy, verificationEmbed, commandAudit, commandAuditEmbed
         );
+    }
+
+    private static void validateTextLengths(VerificationEmbedConfig e) {
+        if (e.title().length() > 256 || e.description().length() > 4096 || e.footer().length() > 2048) throw new IllegalArgumentException("Verification embed text exceeds Discord limits");
+        for (String field : List.of(e.minecraftField(), e.roleField(), e.ipField(), e.verificationField(), e.expiryField(), e.serverField())) {
+            if (field == null || field.length() > 256) throw new IllegalArgumentException("Verification embed field name exceeds Discord limit");
+        }
+        if (e.approveButton().length() > 80 || e.denyButton().length() > 80) throw new IllegalArgumentException("Verification button label exceeds Discord limit");
+    }
+
+    private static void validateCommandAudit(CommandAuditConfig c) {
+        for (String p : c.dangerousCommands()) if (p.length() > 64 || p.indexOf('\n') >= 0 || p.indexOf('\r') >= 0) throw new IllegalArgumentException("Invalid dangerous command pattern: " + p);
     }
 
     private static List<String> validateDiscordIds(List<String> raw, String path) {

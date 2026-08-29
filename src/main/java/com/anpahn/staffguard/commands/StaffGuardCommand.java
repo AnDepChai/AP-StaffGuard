@@ -5,6 +5,8 @@ import com.anpahn.staffguard.model.ProtectedAccount;
 import com.anpahn.staffguard.model.Role;
 import com.anpahn.staffguard.model.SecurityEventType;
 import com.anpahn.staffguard.util.IpAddressUtil;
+import com.anpahn.staffguard.util.ClientIpResolver;
+import com.anpahn.staffguard.model.AccountStatus;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -23,15 +25,14 @@ import java.util.logging.Level;
 
 public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     private static final List<String> OWNER_COMMANDS = List.of(
-            "add", "remove", "info", "trust", "untrust", "reset", "verify", "revoke", "lockdown", "unlock", "logs", "reload", "help"
+            "add", "remove", "info", "trust", "untrust", "reset", "verify", "revoke", "lock", "account-unlock", "account-revoke", "lockdown", "unlock", "logs", "reload", "help"
     );
     private static final List<String> ADMIN_COMMANDS = List.of("help", "info", "logs");
 
     private final StaffGuardPlugin plugin;
+    private final ClientIpResolver ipResolver;
 
-    public StaffGuardCommand(StaffGuardPlugin plugin) {
-        this.plugin = plugin;
-    }
+    public StaffGuardCommand(StaffGuardPlugin plugin) { this.plugin=plugin; this.ipResolver=new ClientIpResolver(plugin.config()); }
 
     private boolean owner(CommandSender sender) {
         return sender instanceof ConsoleCommandSender || sender.hasPermission("staffguard.owner");
@@ -63,6 +64,9 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
                 case "reset" -> reset(sender, args);
                 case "verify" -> verify(sender, args);
                 case "revoke" -> revoke(sender, args);
+                case "lock" -> accountStatus(sender, args, AccountStatus.LOCKED);
+                case "account-unlock" -> accountStatus(sender, args, AccountStatus.ACTIVE);
+                case "account-revoke" -> accountStatus(sender, args, AccountStatus.REVOKED);
                 case "lockdown" -> lockdown(sender, true);
                 case "unlock" -> lockdown(sender, false);
                 case "logs" -> logs(sender, args);
@@ -98,8 +102,12 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§e/reset <player|uuid>");
             sender.sendMessage("§e/verify <player>");
             sender.sendMessage("§e/revoke <verificationId>");
+            sender.sendMessage("§e/lock <player|uuid>");
+            sender.sendMessage("§e/account-unlock <player|uuid>");
+            sender.sendMessage("§e/account-revoke <player|uuid>");
             sender.sendMessage("§e/lockdown");
-            sender.sendMessage("§e/unlock");
+            sender.sendMessage("§e/unlock §7(disable lockdown)");
+            sender.sendMessage("§e/account-unlock <player|uuid>");
             sender.sendMessage("§e/reload");
         }
         sender.sendMessage("§8────────────────────────────");
@@ -143,14 +151,8 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        CompletableFuture<ProtectedAccount> operation = plugin.db().countAccountsForDiscordExcept(discordId, target.getUniqueId())
-                .thenCompose(count -> {
-                    if (count >= plugin.config().maxDiscordAccountsPerUser()) {
-                        throw new IllegalStateException("Discord User ID đã đạt giới hạn protected accounts");
-                    }
-                    return plugin.accounts().add(target.getUniqueId(), target.getName(), role, discordId);
-                })
-                .thenCompose(account -> plugin.ips().load(List.of(account.uuid())).thenApply(v -> account));
+        CompletableFuture<ProtectedAccount> operation = plugin.accounts().add(target.getUniqueId(), target.getName(), role, discordId, plugin.config().maxDiscordAccountsPerUser())
+                .thenCompose(account -> { plugin.ips().invalidate(account.uuid()); plugin.banService().invalidate(account.uuid()); return plugin.ips().load(List.of(account.uuid())).thenApply(v -> account); });
 
         runAsync(sender, "add protected account", operation, account -> {
             sender.sendMessage("§aĐã " + (existing == null ? "đăng ký" : "cập nhật") + " §f" + account.username()
@@ -238,11 +240,9 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(plugin.messages().notFound());
             return;
         }
-        CompletableFuture<Void> operation = plugin.banService().remove(uuid)
-                .thenCompose(v -> plugin.verification().expireForAccount(uuid)
-                        .thenApply(ignored -> (Void) null));
-        runAsync(sender, "reset account", operation, ignored ->
-                sender.sendMessage("§aĐã reset ban và verification đang chờ của account."));
+        CompletableFuture<Boolean> operation = plugin.accounts().resetSecurity(uuid)
+                .thenApply(ok -> { plugin.ips().invalidate(uuid); plugin.banService().invalidate(uuid); return ok; });
+        runAsync(sender, "reset account security", operation, ok -> sender.sendMessage(ok ? "§aĐã reset security state: session/trusted IP/managed ban đã invalidated." : plugin.messages().notFound()));
     }
 
     private void verify(CommandSender sender, String[] args) {
@@ -261,15 +261,11 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(plugin.messages().notFound());
             return;
         }
-        String ip = target.getAddress() == null ? null : target.getAddress().getAddress().getHostAddress();
-        if (ip == null) {
-            sender.sendMessage("§cKhông lấy được connection address.");
-            return;
-        }
-        CompletableFuture<Void> operation = plugin.ips().add(account.uuid(), ip)
-                .thenCompose(v -> plugin.banService().remove(account.uuid()));
-        runAsync(sender, "manual verify", operation, ignored ->
-                sender.sendMessage("§aĐã manual verify và trust IP hiện tại."));
+        ClientIpResolver.Resolution resolved = ipResolver.resolvePlayer(target);
+        if (!resolved.valid()) { sender.sendMessage("§c" + resolved.reason()); return; }
+        CompletableFuture<Boolean> operation = plugin.ips().add(account.uuid(), resolved.ip())
+                .thenCompose(ok -> plugin.banService().remove(account.uuid()).thenApply(v -> ok));
+        runAsync(sender, "manual verify", operation, ok -> sender.sendMessage(ok ? "§aĐã manual verify và trust IP hiện tại." : "§cKhông thể trust IP hiện tại."));
     }
 
     private void revoke(CommandSender sender, String[] args) {
@@ -285,6 +281,16 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
         } catch (IllegalArgumentException ex) {
             sender.sendMessage("§cVerification ID không hợp lệ.");
         }
+    }
+
+    private void accountStatus(CommandSender sender, String[] args, AccountStatus status) {
+        if (!requireOwner(sender)) return;
+        if (args.length < 2) { sender.sendMessage("§e/staffguard " + (status==AccountStatus.LOCKED?"lock":status==AccountStatus.REVOKED?"account-revoke":"account-unlock") + " <player|uuid>"); return; }
+        UUID uuid=lookup(args[1]); if(uuid==null){sender.sendMessage(plugin.messages().notFound());return;}
+        runAsync(sender,"account status transition",plugin.accounts().setStatus(uuid,status).thenApply(ok->{plugin.ips().invalidate(uuid);plugin.banService().invalidate(uuid);return ok;}),ok->{
+            sender.sendMessage(ok?"§aAccount status → §f"+status:"§cState transition rejected (invalid lifecycle or account missing).");
+            if(ok) plugin.audit().log(uuid,null,SecurityEventType.ADMIN_ACTION,"SUCCESS","status -> "+status+" by "+sender.getName(),null,null);
+        });
     }
 
     private void lockdown(CommandSender sender, boolean enable) {

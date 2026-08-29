@@ -5,7 +5,7 @@
 
     <groupId>com.anpahn</groupId>
     <artifactId>AP-StaffGuard</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.3</version>
     <packaging>jar</packaging>
     <name>AP-StaffGuard</name>
     <description>Security-first Staff/Owner protection for Paper servers.</description>
