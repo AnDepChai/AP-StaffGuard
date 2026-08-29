@@ -22,13 +22,21 @@ public final class LoginListener implements Listener {
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         var uuid=event.getUniqueId();
         if (plugin.config() == null || !plugin.config().securityEnabled()) return;
-        ProtectedAccount account=plugin.accounts()==null?null:plugin.accounts().getCached(uuid);
-        if (account==null || !account.active()) return;
-        if (!plugin.securityState().isReady()) {
+        if (plugin.accounts()==null || !plugin.accounts().isLoaded()) {
+            plugin.getLogger().warning("Protected login fail-closed for "+uuid+"; account inventory is not loaded yet.");
             deny(event,plugin.config().securityUnavailableMessage());
-            plugin.audit().log(uuid,account.role(),SecurityEventType.AUTH_FAILURE,"DENIED","security backend not ready",null,null);
             return;
         }
+        ProtectedAccount account=plugin.accounts().getCached(uuid);
+        if (account==null || !account.active()) return;
+        var securityStatus=plugin.securityState().status();
+        if (!plugin.securityState().isOperational()) {
+            plugin.getLogger().warning("Protected login fail-closed for "+uuid+"; security state="+securityStatus);
+            deny(event,plugin.config().securityUnavailableMessage());
+            plugin.audit().log(uuid,account.role(),SecurityEventType.AUTH_FAILURE,"DENIED","security backend unavailable: "+securityStatus,null,null);
+            return;
+        }
+        plugin.getLogger().fine("Protected login check for "+uuid+"; security state="+securityStatus);
         ClientIpResolver.Resolution resolved=resolver.resolve(event);
         if (!resolved.valid()) {
             deny(event,plugin.config().securityUnavailableMessage());
@@ -68,10 +76,11 @@ public final class LoginListener implements Listener {
             });
             deny(event,plugin.config().differentIpMessage());
         } catch (TimeoutException ex) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING,"Protected login timed out for "+uuid+"; fail-closed",ex);
             deny(event,plugin.config().securityUnavailableMessage());
             plugin.audit().log(uuid,account.role(),SecurityEventType.AUTH_FAILURE,"DENIED","security operation timeout",null,null);
         } catch (Exception ex) {
-            plugin.getLogger().log(java.util.logging.Level.SEVERE,"Protected login processing failed for "+uuid,ex);
+            plugin.getLogger().log(java.util.logging.Level.SEVERE,"Protected login processing failed for "+uuid+"; fail-closed",ex);
             deny(event,plugin.config().securityUnavailableMessage());
             plugin.audit().log(uuid,account.role(),SecurityEventType.AUTH_FAILURE,"DENIED","security operation failure",null,null);
         }

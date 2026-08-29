@@ -115,13 +115,13 @@ public final class StaffGuardPlugin extends JavaPlugin {
                 CompletableFuture<Integer> auditCleanup=db.cleanupAudit(config.auditRetentionDays()*24L*60L*60L*1000L);
                 if(verification!=null)verification.cleanupRateLimiters(); if(discord!=null)discord.cleanupRateLimiter();
                 CompletableFuture.allOf(expired,bansFuture,auditCleanup).whenComplete((v,error)->{
-                    if(error!=null){securityState.set(SecurityState.Status.DEGRADED);getLogger().log(Level.WARNING,"Security maintenance failed; protected operations fail closed until database maintenance recovers.",unwrap(error));}
+                    if(error!=null){securityState.set(SecurityState.Status.DEGRADED);getLogger().log(Level.WARNING,"Security maintenance entered DEGRADED; login authorization will continue using the DB-backed path and fail closed only if that path fails.",unwrap(error));}
                     else {
                         securityState.set(SecurityState.Status.READY);
                         if(discord!=null&&config.discordEnabled()&&!discord.isConnected()) discord.start();
                     }
                 });
-            }catch(Exception e){securityState.set(SecurityState.Status.DEGRADED);getLogger().log(Level.WARNING,"Security maintenance failed; protected login operations fail closed until recovery.",e);}
+            }catch(Exception e){securityState.set(SecurityState.Status.DEGRADED);getLogger().log(Level.WARNING,"Security maintenance entered DEGRADED; login authorization will continue using the DB-backed path and fail closed only if that path fails.",e);}
         },30,30,TimeUnit.SECONDS);
     }
 
