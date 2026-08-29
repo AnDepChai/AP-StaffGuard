@@ -73,10 +73,10 @@ public final class Database implements AutoCloseable {
             if (!single && !doubleQuote && ch == '/' && next == '*') { current.append(ch).append(next); i++; blockComment = true; continue; }
             if (ch == '\'' && !doubleQuote) { current.append(ch); if (single && next == '\'') { current.append(next); i++; } else single = !single; continue; }
             if (ch == '"' && !single) { current.append(ch); if (doubleQuote && next == '"') { current.append(next); i++; } else doubleQuote = !doubleQuote; continue; }
-            if (ch == ';' && !single && !doubleQuote) { if (!current.toString().isBlank()) statements.add(current.toString()); current.setLength(0); }
+            if (ch == ';' && !single && !doubleQuote) { if (!current.isBlank()) statements.add(current.toString()); current.setLength(0); }
             else current.append(ch);
         }
-        if (!current.toString().isBlank()) statements.add(current.toString());
+        if (!current.isBlank()) statements.add(current.toString());
         return statements;
     }
 

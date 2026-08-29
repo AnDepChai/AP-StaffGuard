@@ -6,7 +6,7 @@ import java.nio.file.Files;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DatabaseLifecycleTest {
-    @Test void resetInvalidatesTrustedAndOldSession(){
+    @Test void resetInvalidatesTrustedAndOldSession() throws Exception {
         var dir=Files.createTempDirectory("sg-lifecycle");
         Database db=new Database(null,dir.resolve("test.db").toFile(),name->DatabaseLifecycleTest.class.getClassLoader().getResourceAsStream(name));
         db.start();
