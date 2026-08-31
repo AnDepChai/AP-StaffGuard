@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DatabaseConcurrencyTest {
     @Test void concurrentApprovalHasSingleWinner() throws Exception {
         var dir=Files.createTempDirectory("sg-db");
-        Database db=new Database(null,dir.resolve("test.db").toFile(),name->DatabaseConcurrencyTest.class.getClassLoader().getResourceAsStream(name));
+        Database db=TestDatabaseFactory.create(dir.resolve("test.db").toFile(),name->DatabaseConcurrencyTest.class.getClassLoader().getResourceAsStream(name));
         db.start();
         UUID account=UUID.randomUUID();
         try {

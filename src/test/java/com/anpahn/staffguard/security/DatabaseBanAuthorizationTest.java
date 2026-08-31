@@ -1,6 +1,7 @@
 package com.anpahn.staffguard.security;
 
 import com.anpahn.staffguard.database.Database;
+import com.anpahn.staffguard.database.TestDatabaseFactory;
 import com.anpahn.staffguard.model.Role;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,7 @@ class DatabaseBanAuthorizationTest {
     @Test
     void activeManagedBanCannotBeBypassedByPreviouslyTrustedIp() throws Exception {
         var dir = Files.createTempDirectory("sg-ban");
-        Database db = new Database(null, dir.resolve("test.db").toFile(),
+        Database db = TestDatabaseFactory.create(dir.resolve("test.db").toFile(),
                 name -> DatabaseBanAuthorizationTest.class.getClassLoader().getResourceAsStream(name));
         db.start();
         UUID uuid = UUID.randomUUID();
@@ -32,7 +33,7 @@ class DatabaseBanAuthorizationTest {
     @Test
     void expiredManagedBanDoesNotBlockTrustedIp() throws Exception {
         var dir = Files.createTempDirectory("sg-ban-expired");
-        Database db = new Database(null, dir.resolve("test.db").toFile(),
+        Database db = TestDatabaseFactory.create(dir.resolve("test.db").toFile(),
                 name -> DatabaseBanAuthorizationTest.class.getClassLoader().getResourceAsStream(name));
         db.start();
         UUID uuid = UUID.randomUUID();

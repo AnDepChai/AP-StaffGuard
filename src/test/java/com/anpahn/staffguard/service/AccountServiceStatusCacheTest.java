@@ -1,6 +1,7 @@
 package com.anpahn.staffguard.service;
 
 import com.anpahn.staffguard.database.Database;
+import com.anpahn.staffguard.database.TestDatabaseFactory;
 import com.anpahn.staffguard.model.AccountStatus;
 import com.anpahn.staffguard.model.Role;
 import org.junit.jupiter.api.Test;
@@ -14,7 +15,7 @@ class AccountServiceStatusCacheTest {
     @Test
     void lockedAndRevokedAccountsRemainVisibleToLoginGate() throws Exception {
         var dir = Files.createTempDirectory("sg-account-status");
-        Database db = new Database(null, dir.resolve("test.db").toFile(), name -> AccountServiceStatusCacheTest.class.getClassLoader().getResourceAsStream(name));
+        Database db = TestDatabaseFactory.create(dir.resolve("test.db").toFile(), name -> AccountServiceStatusCacheTest.class.getClassLoader().getResourceAsStream(name));
         db.start();
         UUID uuid = UUID.randomUUID();
         try {

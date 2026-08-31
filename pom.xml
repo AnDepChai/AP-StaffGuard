@@ -83,6 +83,9 @@
                 <configuration>
                     <release>${maven.compiler.release}</release>
                     <encoding>${project.build.sourceEncoding}</encoding>
+                    <!-- AP-StaffGuard does not use annotation processors. Keep javac from
+                         discovering processors transitively and emitting the JDK 25+ warning. -->
+                    <proc>none</proc>
                 </configuration>
             </plugin>
 

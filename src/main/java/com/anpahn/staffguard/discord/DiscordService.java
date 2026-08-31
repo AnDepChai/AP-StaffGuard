@@ -8,6 +8,7 @@ import com.anpahn.staffguard.service.VerificationService;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.JDALogger;
 import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
@@ -58,6 +59,9 @@ public final class DiscordService extends ListenerAdapter implements AutoCloseab
                     return false;
                 }
 
+                // Paper already supplies an SLF4J backend. Do not let JDA install its
+                // own fallback logger, which would otherwise produce noisy startup warnings.
+                JDALogger.setFallbackLoggerEnabled(false);
                 local = JDABuilder.createDefault(token).addEventListeners(this).build();
                 local.awaitReady();
 
