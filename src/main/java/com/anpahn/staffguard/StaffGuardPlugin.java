@@ -56,8 +56,8 @@ public final class StaffGuardPlugin extends JavaPlugin {
         securityState.set(SecurityState.Status.STARTING);
         printBanner();
 
-        // Register the security login gate BEFORE parsing user configuration.
-        // This preserves the fail-closed invariant even when startup configuration is malformed.
+        
+        
         try {
             getServer().getPluginManager().registerEvents(new LoginListener(this), this);
             getLogger().info("  ✓ Cổng kiểm soát đăng nhập đã được đăng ký (fail-closed).");
@@ -77,7 +77,7 @@ public final class StaffGuardPlugin extends JavaPlugin {
 
             byte[] secret = null;
             if (securityEnabled) {
-                // Validation is already performed by StaffGuardConfig.from(); this is the actual decode.
+                
                 secret = SecurityUtil.parseServerSecret(config.serverSecretValue());
             }
 

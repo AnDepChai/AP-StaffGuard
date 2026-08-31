@@ -46,7 +46,7 @@ public final class SecurityUtil {
                 try {
                     decoded = Base64.getDecoder().decode(secret);
                 } catch (IllegalArgumentException ignoredAgain) {
-                    // handled below
+                    
                 }
             }
         }

@@ -7,11 +7,11 @@ public final class SecurityState {
     private final AtomicReference<Status> status=new AtomicReference<>(Status.STARTING);
     public Status status(){return status.get();}
     public boolean isReady(){return status.get()==Status.READY;}
-    /**
-     * READY means startup is healthy. DEGRADED means background maintenance had a
-     * transient failure, but the actual DB-backed authentication path is still
-     * allowed to run and will fail closed if the operation itself fails.
-     */
+    
+
+
+
+
     public boolean isOperational(){
         Status current=status.get();
         return current==Status.READY || current==Status.DEGRADED;

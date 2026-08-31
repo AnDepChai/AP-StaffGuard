@@ -24,7 +24,7 @@ public final class TrustedIpService {
 
     public String hash(String ip) { return SecurityUtil.hmacSha256Hex(secret, ip); }
 
-    /** Database is the authority; the cache is intentionally not consulted for authorization. */
+    
     public CompletableFuture<Boolean> isTrusted(UUID uuid, String ip) {
         String hash = hash(ip);
         return db.loadTrustedIps(uuid).thenApply(values -> { putCache(uuid, values); return values.contains(hash); });

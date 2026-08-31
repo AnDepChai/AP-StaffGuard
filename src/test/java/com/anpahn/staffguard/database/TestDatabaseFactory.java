@@ -5,7 +5,7 @@ import java.io.InputStream;
 import java.util.Objects;
 import java.util.function.Function;
 
-/** Test-only bridge for constructing an isolated Database without widening the production API. */
+
 public final class TestDatabaseFactory {
     private TestDatabaseFactory() {
     }

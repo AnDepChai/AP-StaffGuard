@@ -63,9 +63,9 @@ public final class AccountService {
 
     public CompletableFuture<Void> refresh(UUID uuid) {
         return db.findAccount(uuid).thenAccept(o -> {
-            // Keep every non-REMOVED lifecycle state in cache. Login authorization must
-            // distinguish ACTIVE, LOCKED and REVOKED instead of treating locked/revoked
-            // accounts as if they had never been registered.
+            
+            
+            
             if (o.isPresent() && o.get().status() != AccountStatus.REMOVED) cache.put(uuid, o.get());
             else cache.remove(uuid);
         });

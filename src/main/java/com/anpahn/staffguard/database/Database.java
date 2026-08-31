@@ -361,11 +361,11 @@ public final class Database implements AutoCloseable {
         TRUSTED
     }
 
-    /**
-     * Atomically decides whether a trusted-IP login may proceed.
-     * Managed security blocks are authoritative and are checked before the trusted-IP record,
-     * so a temporary block can never be accidentally bypassed by a previously trusted IP.
-     */
+    
+
+
+
+
     public CompletableFuture<TrustedLoginDecision> authorizeTrustedLogin(UUID uuid, String ipHash, long now) {
         return submit(c -> {
             c.setAutoCommit(false);

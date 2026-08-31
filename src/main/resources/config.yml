@@ -97,7 +97,7 @@ database:
   file: "staffguard.db"
 
 server-secret:
-  # Bắt buộc: 256-bit secret persistent. Dùng 64 hex chars hoặc base64/base64url của đúng 32 bytes. Không để trống.
+
   value: ""
 
 proxy:

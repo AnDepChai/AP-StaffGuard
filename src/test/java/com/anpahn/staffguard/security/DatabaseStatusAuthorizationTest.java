@@ -28,7 +28,7 @@ class DatabaseStatusAuthorizationTest {
             assertEquals(Database.TrustedLoginDecision.ACCOUNT_NOT_AUTHORIZABLE,
                     db.authorizeTrustedLogin(uuid, "hash", System.currentTimeMillis()).join());
 
-            // A locked account must be explicitly restored to ACTIVE before it can be revoked.
+            
             assertTrue(db.transitionStatus(uuid, AccountStatus.ACTIVE).join());
             assertTrue(db.transitionStatus(uuid, AccountStatus.REVOKED).join());
             assertEquals(Database.TrustedLoginDecision.ACCOUNT_NOT_AUTHORIZABLE,

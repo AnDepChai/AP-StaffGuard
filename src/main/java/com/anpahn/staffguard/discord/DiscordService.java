@@ -204,8 +204,8 @@ public final class DiscordService extends ListenerAdapter implements AutoCloseab
         final String proof = parts[3];
         final UUID finalSessionId = sessionId;
 
-        // Acknowledge immediately. JDA requires the initial interaction response
-        // within 3 seconds; all database/business work happens afterwards.
+        
+        
         event.deferReply(true).queue(hook -> verification.getSession(finalSessionId).whenComplete((found, error) -> {
             if (error != null) {
                 logger.log(Level.WARNING, "Không thể tải verification session=" + finalSessionId, unwrap(error));

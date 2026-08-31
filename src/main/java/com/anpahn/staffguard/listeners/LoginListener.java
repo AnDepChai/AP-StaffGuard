@@ -18,11 +18,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 
-/**
- * Final security gate for protected-account logins.
- * This listener is intentionally registered before configuration parsing so that
- * malformed configuration cannot accidentally remove the login protection hook.
- */
+
+
+
+
+
 public final class LoginListener implements Listener {
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
 
@@ -35,7 +35,7 @@ public final class LoginListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
-        // Do not replace a denial that was already established by another plugin.
+        
         if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
             plugin.getLogger().fine("Login gate skipped because another plugin already denied the connection; player="
                     + event.getName() + ", reason=" + event.getLoginResult());
@@ -46,7 +46,7 @@ public final class LoginListener implements Listener {
         try {
             handlePreLogin(event, uuid);
         } catch (Exception ex) {
-            // The login gate must never silently fail open because of an unexpected runtime exception.
+            
             var messages = plugin.messages();
             deny(event, messages == null
                     ? "§cKhông thể hoàn tất kiểm tra bảo mật. §fVui lòng liên hệ quản trị viên."
