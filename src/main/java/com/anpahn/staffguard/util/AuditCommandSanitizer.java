@@ -10,7 +10,8 @@ import java.util.regex.Pattern;
 public final class AuditCommandSanitizer {
     private static final Pattern IP=Pattern.compile("(?<![\\w.])(?:\\d{1,3}\\.){3}\\d{1,3}(?![\\w.])|(?<![\\w:])(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f:]{1,4}(?![\\w:])");
     private static final Pattern SENSITIVE_ASSIGN=Pattern.compile("(?i)\\b(password|passwd|token|secret|apikey|api-key|authorization|cookie)\\s*=\\s*[^\\s]+(?=$|\\s)");
-    private static final Pattern SENSITIVE_FLAG=Pattern.compile("(?i)(--(?:password|passwd|token|secret|apikey|api-key|authorization|cookie))\\s+[^\\s]+");
+    private static final Pattern SENSITIVE_FLAG = Pattern.compile("(?i)(--(?:password|passwd|token|secret|apikey|api-key|authorization|cookie))\\s+(?:\"[^\"]*\"|'[^']*'|[^\\s]+)");
+    private static final Pattern SENSITIVE_COLON = Pattern.compile("(?i)[\"\']?(password|passwd|token|secret|apikey|api-key|authorization|cookie)[\"\']?\\s*[:=]\\s*(?:[\"\'][^\"\']*[\"\']|[^\\s,}]+)");
     private static final Pattern BEARER=Pattern.compile("(?i)\\bBearer\\s+[^\\s]+");
     private static final Pattern COORD=Pattern.compile("(?<![\\w.-])-?\\d+(?:\\.\\d+)?(?![\\w.-])");
 
@@ -27,6 +28,7 @@ public final class AuditCommandSanitizer {
         if(cfg.commandAudit().redactSensitiveArguments()){
             base=SENSITIVE_ASSIGN.matcher(base).replaceAll(m->m.group(1)+"=<redacted>");
             base=SENSITIVE_FLAG.matcher(base).replaceAll("$1 <redacted>");
+            base=SENSITIVE_COLON.matcher(base).replaceAll(m->m.group(1)+":<redacted>");
             base=BEARER.matcher(base).replaceAll("Bearer <redacted>");
         }
         if(cfg.privacy().redactIpInCommandAudit())base=IP.matcher(base).replaceAll("<ip-redacted>");

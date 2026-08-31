@@ -3,6 +3,7 @@ package com.anpahn.staffguard.config;
 import com.anpahn.staffguard.model.ProxyMode;
 import com.anpahn.staffguard.util.DurationParser;
 import com.anpahn.staffguard.util.IpMatcher;
+import com.anpahn.staffguard.util.SecurityUtil;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.time.Duration;
@@ -84,11 +85,46 @@ public record StaffGuardConfig(
         for (String ownerId : ownerIds) {
             if (staffIds.contains(ownerId)) throw new IllegalArgumentException("Discord User ID " + ownerId + " cannot be listed as both owner and staff");
         }
+        boolean securityEnabled = c.getBoolean("security.enabled", true);
         boolean discordEnabled = c.getBoolean("discord.enabled", false);
         boolean selfApproval = c.getBoolean("discord.allow-self-approval", false);
-        String discordChannelId = c.getString("discord.channel-id", "");
-        if (discordEnabled && !DISCORD_ID.matcher(discordChannelId).matches()) throw new IllegalArgumentException("discord.channel-id must be a Discord snowflake (17..20 digits)");
-        if (discordEnabled && ownerIds.isEmpty() && staffIds.isEmpty() && !selfApproval) throw new IllegalArgumentException("At least one Discord approver is required when self approval is disabled");
+        String discordToken = c.getString("discord.bot-token", "");
+        String discordChannelId = c.getString("discord.channel-id", "").trim();
+
+        List<String> configErrors = new ArrayList<>();
+        String databaseFile = c.getString("database.file", "staffguard.db");
+        if (!isSafeDatabaseFile(databaseFile)) {
+            configErrors.add("database.file: chỉ được là tên file tương đối nằm trong thư mục dữ liệu của plugin; không chấp nhận đường dẫn tuyệt đối hoặc '..'.");
+        }
+        if (securityEnabled) {
+            String rawSecret = c.getString("server-secret.value", "");
+            try { SecurityUtil.parseServerSecret(rawSecret); }
+            catch (IllegalArgumentException ex) {
+                configErrors.add("server-secret.value: " + ex.getMessage());
+            }
+        }
+        if (discordEnabled && !securityEnabled) {
+            configErrors.add("discord.enabled=true nhưng security.enabled=false. Discord verification không thể hoạt động khi security bị tắt.");
+        }
+        if (discordEnabled) {
+            if (discordToken == null || discordToken.isBlank() || !discordToken.equals(discordToken.trim())
+                    || discordToken.codePoints().anyMatch(Character::isWhitespace)) {
+                configErrors.add("discord.bot-token: phải được cấu hình và không được chứa khoảng trắng.");
+            }
+            if (!DISCORD_ID.matcher(discordChannelId == null ? "" : discordChannelId.trim()).matches()) {
+                configErrors.add("discord.channel-id: phải là Discord Channel ID hợp lệ (17-20 chữ số).");
+            }
+            if (ownerIds.isEmpty() && staffIds.isEmpty()) {
+                configErrors.add("discord.owner-user-ids/staff-user-ids: phải có ít nhất một UID có quyền xác thực; allow-self-approval không tự cấp quyền cho UID chưa được khai báo.");
+            }
+        }
+        if (commandAuditEnabled(c) && !discordEnabled) {
+            configErrors.add("discord.command-audit.enabled=true nhưng discord.enabled=false.");
+        }
+        if (!configErrors.isEmpty()) {
+            throw new IllegalArgumentException("Cấu hình AP-StaffGuard chưa hợp lệ:\n - " + String.join("\n - ", configErrors) +
+                    "\nGợi ý: sửa config.yml rồi restart server. Không tự động tạo hoặc thay thế secret bảo mật.");
+        }
 
         PrivacyConfig privacy = new PrivacyConfig(
                 c.getBoolean("privacy.enabled", true),
@@ -121,7 +157,6 @@ public record StaffGuardConfig(
                 c.getStringList("discord.command-audit.dangerous-commands").stream().filter(v -> v != null && !v.isBlank()).map(String::trim).distinct().toList(),
                 c.getBoolean("discord.command-audit.redact-sensitive-arguments", true)
         );
-        if (commandAudit.enabled() && !discordEnabled) throw new IllegalArgumentException("discord.command-audit requires discord.enabled=true");
         if (commandAudit.enabled() && !DISCORD_ID.matcher(commandAudit.channelId()).matches()) throw new IllegalArgumentException("discord.command-audit.channel-id must be a Discord snowflake (17..20 digits)");
         validateCommandAudit(commandAudit);
 
@@ -140,17 +175,31 @@ public record StaffGuardConfig(
         );
 
         return new StaffGuardConfig(
-                c.getBoolean("security.enabled", true), temp, timeout, maxTrusted, perAccount, perIp, pending, interactions, maxDiscord,
+                securityEnabled, temp, timeout, maxTrusted, perAccount, perIp, pending, interactions, maxDiscord,
                 tokenBytes, notificationMax, notificationCooldown, auditRetentionDays, c.getBoolean("security.mask-ip-in-discord", true), discordEnabled,
-                discordChannelId, c.getString("discord.bot-token", ""), ownerIds, staffIds,
+                discordChannelId, discordToken, ownerIds, staffIds,
                 c.getBoolean("discord.send-dm", true), selfApproval,
-                c.getString("database.file", "staffguard.db"), c.getString("server.display-name", "Minecraft Server"),
+                databaseFile, c.getString("server.display-name", "Minecraft Server"),
                 c.getString("server-secret.value", ""), proxyMode, trustedProxyAddresses,
                 c.getString("messages.different-ip", "§cTài khoản đang đăng nhập từ IP chưa được tin cậy. §fVui lòng xác minh qua Discord rồi đăng nhập lại."),
                 c.getString("messages.lockdown", "§cStaffGuard đang ở chế độ LOCKDOWN. §fVui lòng liên hệ quản trị viên."),
                 c.getString("messages.security-unavailable", "§cBảo mật StaffGuard chưa sẵn sàng. §fVui lòng liên hệ quản trị viên."),
                 privacy, verificationEmbed, commandAudit, commandAuditEmbed
         );
+    }
+
+    private static boolean isSafeDatabaseFile(String value) {
+        if (value == null || value.isBlank()) return false;
+        String normalized = value.trim();
+        if (!normalized.equals(value)) return false;
+        java.io.File file = new java.io.File(normalized);
+        if (file.isAbsolute()) return false;
+        if (normalized.contains("..") || normalized.contains("/") || normalized.contains("\\")) return false;
+        return normalized.toLowerCase(java.util.Locale.ROOT).endsWith(".db");
+    }
+
+    private static boolean commandAuditEnabled(FileConfiguration c) {
+        return c.getBoolean("discord.command-audit.enabled", false);
     }
 
     private static void validateTextLengths(VerificationEmbedConfig e) {

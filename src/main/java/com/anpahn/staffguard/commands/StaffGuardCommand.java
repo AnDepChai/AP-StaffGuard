@@ -203,7 +203,7 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void trust(CommandSender sender, String[] args, boolean add) {
-        if (!requireOwner(sender)) return;
+        if (!requireOwner(sender) || !requireSecurityEnabled(sender)) return;
         if (args.length < 3) {
             sender.sendMessage("§e/staffguard " + (add ? "trust" : "untrust") + " <player|uuid> <ip>");
             return;
@@ -230,7 +230,7 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void reset(CommandSender sender, String[] args) {
-        if (!requireOwner(sender)) return;
+        if (!requireOwner(sender) || !requireSecurityEnabled(sender)) return;
         if (args.length < 2) {
             sender.sendMessage("§e/staffguard reset <player|uuid>");
             return;
@@ -246,7 +246,7 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void verify(CommandSender sender, String[] args) {
-        if (!requireOwner(sender)) return;
+        if (!requireOwner(sender) || !requireSecurityEnabled(sender)) return;
         if (args.length < 2) {
             sender.sendMessage("§e/staffguard verify <player>");
             return;
@@ -269,7 +269,7 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void revoke(CommandSender sender, String[] args) {
-        if (!requireOwner(sender)) return;
+        if (!requireOwner(sender) || !requireSecurityEnabled(sender)) return;
         if (args.length < 2) {
             sender.sendMessage("§e/staffguard revoke <verificationId>");
             return;
@@ -284,7 +284,7 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void accountStatus(CommandSender sender, String[] args, AccountStatus status) {
-        if (!requireOwner(sender)) return;
+        if (!requireOwner(sender) || !requireSecurityEnabled(sender)) return;
         if (args.length < 2) { sender.sendMessage("§e/staffguard " + (status==AccountStatus.LOCKED?"lock":status==AccountStatus.REVOKED?"account-revoke":"account-unlock") + " <player|uuid>"); return; }
         UUID uuid=lookup(args[1]); if(uuid==null){sender.sendMessage(plugin.messages().notFound());return;}
         runAsync(sender,"account status transition",plugin.accounts().setStatus(uuid,status).thenApply(ok->{plugin.ips().invalidate(uuid);plugin.banService().invalidate(uuid);return ok;}),ok->{
@@ -294,7 +294,7 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     }
 
     private void lockdown(CommandSender sender, boolean enable) {
-        if (!requireOwner(sender)) return;
+        if (!requireOwner(sender) || !requireSecurityEnabled(sender)) return;
         boolean changed = enable ? plugin.lockdown().enable() : plugin.lockdown().disable();
         sender.sendMessage(changed ? (enable ? "§cLOCKDOWN enabled." : "§aLOCKDOWN disabled.") : "§eTrạng thái không thay đổi.");
         plugin.audit().log(null, null, enable ? SecurityEventType.LOCKDOWN_ENABLED : SecurityEventType.LOCKDOWN_DISABLED,
@@ -353,6 +353,12 @@ public final class StaffGuardCommand implements CommandExecutor, TabCompleter {
     private static Throwable unwrap(Throwable error) {
         if (error instanceof java.util.concurrent.CompletionException && error.getCause() != null) return error.getCause();
         return error;
+    }
+
+    private boolean requireSecurityEnabled(CommandSender sender) {
+        if (plugin.config() != null && plugin.config().securityEnabled()) return true;
+        sender.sendMessage("§cTính năng bảo mật đang TẮT trong config.yml. §fBật security.enabled=true rồi restart server.");
+        return false;
     }
 
     private boolean requireOwner(CommandSender sender) {

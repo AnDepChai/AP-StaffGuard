@@ -354,23 +354,54 @@ public final class Database implements AutoCloseable {
         });
     }
 
-    public CompletableFuture<Boolean> authorizeTrustedLogin(UUID uuid, String ipHash, long now) {
+    public enum TrustedLoginDecision {
+        ACCOUNT_NOT_AUTHORIZABLE,
+        TEMPORARY_SECURITY_BLOCK,
+        NOT_TRUSTED,
+        TRUSTED
+    }
+
+    /**
+     * Atomically decides whether a trusted-IP login may proceed.
+     * Managed security blocks are authoritative and are checked before the trusted-IP record,
+     * so a temporary block can never be accidentally bypassed by a previously trusted IP.
+     */
+    public CompletableFuture<TrustedLoginDecision> authorizeTrustedLogin(UUID uuid, String ipHash, long now) {
         return submit(c -> {
             c.setAutoCommit(false);
             try {
                 Optional<ProtectedAccount> account = queryAccount(c, uuid);
-                if (account.isEmpty() || !account.get().active()) { c.rollback(); return false; }
+                if (account.isEmpty() || !account.get().active()) { c.rollback(); return TrustedLoginDecision.ACCOUNT_NOT_AUTHORIZABLE; }
+
+                try (PreparedStatement ban = c.prepareStatement("SELECT active,expires_at FROM managed_bans WHERE uuid=? LIMIT 1")) {
+                    ban.setString(1, uuid.toString());
+                    try (ResultSet r = ban.executeQuery()) {
+                        if (r.next()) {
+                            boolean active = r.getInt(1) == 1;
+                            long expiresAt = r.getLong(2);
+                            if (active && expiresAt > now) {
+                                c.rollback();
+                                return TrustedLoginDecision.TEMPORARY_SECURITY_BLOCK;
+                            }
+                            if (active) deactivateBan(c, uuid, now);
+                        }
+                    }
+                }
+
                 String trustSql = "SELECT 1 FROM trusted_ips WHERE uuid=? AND ip_hash=? AND security_generation=? LIMIT 1";
                 try (PreparedStatement p = c.prepareStatement(trustSql)) {
                     p.setString(1, uuid.toString()); p.setString(2, ipHash); p.setLong(3, account.get().securityGeneration());
-                    try (ResultSet r = p.executeQuery()) { if (!r.next()) { c.rollback(); return false; } }
+                    try (ResultSet r = p.executeQuery()) {
+                        if (!r.next()) { c.rollback(); return TrustedLoginDecision.NOT_TRUSTED; }
+                    }
                 }
+
                 try (PreparedStatement p = c.prepareStatement("UPDATE protected_accounts SET last_seen_ip_hash=?,last_seen_at=?,updated_at=? WHERE uuid=? AND status='ACTIVE' AND security_generation=?")) {
                     p.setString(1, ipHash); p.setLong(2, now); p.setLong(3, now); p.setString(4, uuid.toString()); p.setLong(5, account.get().securityGeneration());
-                    if (p.executeUpdate() != 1) { c.rollback(); return false; }
+                    if (p.executeUpdate() != 1) { c.rollback(); return TrustedLoginDecision.ACCOUNT_NOT_AUTHORIZABLE; }
                 }
-                deactivateBan(c, uuid, now);
-                c.commit(); return true;
+                c.commit();
+                return TrustedLoginDecision.TRUSTED;
             } catch (Exception e) { try { c.rollback(); } catch (SQLException ignored) { } throw e; }
             finally { c.setAutoCommit(true); }
         });

@@ -29,10 +29,13 @@ public final class SecurityUtil {
     }
 
     public static byte[] parseServerSecret(String value) {
-        if (value == null || value.isBlank() || !value.equals(value.trim())) {
-            throw new IllegalArgumentException("server-secret.value must be non-empty and have no surrounding/embedded whitespace");
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("phải có giá trị 256-bit và không được để trống");
         }
-        String secret = value.trim();
+        if (!value.equals(value.trim()) || value.codePoints().anyMatch(Character::isWhitespace)) {
+            throw new IllegalArgumentException("không được chứa khoảng trắng ở đầu, cuối hoặc bên trong chuỗi");
+        }
+        String secret = value;
         byte[] decoded = null;
         if (secret.matches("[0-9a-fA-F]{64}")) {
             decoded = HexFormat.of().parseHex(secret);

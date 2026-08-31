@@ -17,5 +17,14 @@ public final class SecurityState {
         return current==Status.READY || current==Status.DEGRADED;
     }
     public void setReady(boolean value){status.set(value?Status.READY:Status.FAIL_CLOSED);}
+    public boolean transition(Status expectedCurrent, Status next){
+        return status.compareAndSet(expectedCurrent, next);
+    }
+
+    public boolean isStopping(){
+        Status current = status.get();
+        return current == Status.STOPPING;
+    }
+
     public void set(Status next){status.set(next);}
 }
